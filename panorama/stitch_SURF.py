@@ -1,7 +1,6 @@
 #!/usr/bin/python
 
 import numpy as np
-import argparse
 import imutils
 import glob
 import cv2
@@ -30,11 +29,11 @@ class Stitcher:
         # otherwise, apply a perspective warp to stitch the images together
         (matches, H, status) = M
         result = cv2.warpPerspective(imageA, H, (imageA.shape[1] + imageB.shape[1], imageA.shape[0]))
+
         result[0:imageB.shape[0], 0:imageB.shape[1]] = imageB
 
-        # crop the image
+        # crop the image (remove black empty areas)
         x_crop = self.emptyRemoval(result)
-
         result = result[0:result.shape[0], 0:x_crop-1]
 
         # check to see if the keypoint matches should be visualized

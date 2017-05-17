@@ -29,7 +29,10 @@ class Stitcher:
         # otherwise, apply a perspective warp to stitch the images together
         (matches, H, status) = M
         result = cv2.warpPerspective(imageA, H, (imageA.shape[1] + imageB.shape[1], imageA.shape[0]))
+
         result[0:imageB.shape[0], 0:imageB.shape[1]] = imageB
+
+        return result
 
         # crop the image
         x_crop = self.emptyRemoval(result)
@@ -156,11 +159,12 @@ if __name__ == '__main__':
 
         # stitch the images together to create a panorama
         stitcher = Stitcher()
-        (result, vis) = stitcher.stitch([imageA, imageB], showMatches=True)
-
+        #(result, vis) = stitcher.stitch([imageA, imageB], showMatches=True)
+        result = stitcher.stitch([imageA, imageB], showMatches=True)
+        
         # show the images
         cv2.imshow("Image A", imageA)
         cv2.imshow("Image B", imageB)
-        cv2.imshow("Keypoint Matches", vis)
+        #cv2.imshow("Keypoint Matches", vis)
         cv2.imshow("Result", result)
         cv2.waitKey(0)

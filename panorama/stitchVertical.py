@@ -1,9 +1,7 @@
-#!/usr/bin/python
-
+# import the necessary packages
 import numpy as np
 import argparse
 import imutils
-import glob
 import cv2
 
 
@@ -12,12 +10,13 @@ class Stitcher:
     # determine if we are using OpenCV v3.X
         self.isv3 = imutils.is_cv3()
 
-    def stitch(self, images, ratio=1, reprojThresh=4.0, showMatches=False):
+    def stitch(self, images, ratio=0.75, reprojThresh=4.0, showMatches=False):
         # unpack the images, then detect keypoints and extract
         # local invariant descriptors from them
         (imageB, imageA) = images
         (kpsA, featuresA) = self.detectAndDescribe(imageA)
         (kpsB, featuresB) = self.detectAndDescribe(imageB)
+        print featuresA
 
         # match features between the two images
         M = self.matchKeypoints(kpsA, kpsB, featuresA, featuresB, ratio, reprojThresh)
@@ -29,13 +28,13 @@ class Stitcher:
 
         # otherwise, apply a perspective warp to stitch the images together
         (matches, H, status) = M
-        result = cv2.warpPerspective(imageA, H, (imageA.shape[1] + imageB.shape[1], imageA.shape[0]))
+        result = cv2.warpPerspective(imageA, H, (imageA.shape[1], imageA.shape[0] + imageB.shape[0]))
+
         result[0:imageB.shape[0], 0:imageB.shape[1]] = imageB
 
         # crop the image
-        x_crop = self.emptyRemoval(result)
-
-        result = result[0:result.shape[0], 0:x_crop-1]
+        y_crop = self.emptyRemoval(result)
+        result = result[0:y_crop-1, 0:result.shape[1]]
 
         # check to see if the keypoint matches should be visualized
         if showMatches:
@@ -108,9 +107,9 @@ class Stitcher:
         # initialize the output visualization image
         (hA, wA) = imageA.shape[:2]
         (hB, wB) = imageB.shape[:2]
-        vis = np.zeros((max(hA, hB), wA + wB, 3), dtype="uint8")
+        vis = np.zeros((hA + hB, max(wA, wB), 3), dtype="uint8")
         vis[0:hA, 0:wA] = imageA
-        vis[0:hB, wA:] = imageB
+        vis[hB:, 0:wA] = imageB
 
         # loop over the matches
         for ((trainIdx, queryIdx), s) in zip(matches, status):
@@ -119,7 +118,7 @@ class Stitcher:
             if s == 1:
                 # draw the match
                 ptA = (int(kpsA[queryIdx][0]), int(kpsA[queryIdx][1]))
-                ptB = (int(kpsB[trainIdx][0]) + wA, int(kpsB[trainIdx][1]))
+                ptB = (int(kpsB[trainIdx][0]), int(kpsB[trainIdx][1]) + hA)
                 cv2.line(vis, ptA, ptB, (0, 255, 0), 1)
 
         # return the visualization
@@ -127,41 +126,40 @@ class Stitcher:
 
     def emptyRemoval(self, image):
         #Returns horizontal coordinate where empty image starts
-        for i in range(image.shape[1], 0, -1):
-            x_top = i
-            if np.all(image[0, i-1] != [0, 0, 0]):
+        for i in range(image.shape[0], 0, -1):
+            y_left = i
+            if np.all(image[i-1, 0] != [0, 0, 0]):
                 break
 
-        for i in range(image.shape[1], 0, -1):
-            x_bottom = i
-            if np.all(image[image.shape[0]-1, i-1] != [0, 0, 0]):
+        for i in range(image.shape[0], 0, -1):
+            y_right = i
+            if np.all(image[i-1, image.shape[1]-1] != [0, 0, 0]):
                 break
 
-        return min(x_top, x_bottom)
-
+        return min(y_left,y_right)
 
 if __name__ == '__main__':
 
-    # acquire images to stitch -- frames should be in alphabetical order from left to right
-    frames = sorted(glob.glob('test_JPL2/*'))
+        # construct the argument parse and parse the arguments
+        ap = argparse.ArgumentParser()
+        ap.add_argument("-f", "--first", required=True, help="path to the first image")
+        ap.add_argument("-s", "--second", required=True, help="path to the second image")
+        args = vars(ap.parse_args())
 
-    # First run execution
-    imageA = cv2.imread(frames[0])
-    imageB = cv2.imread(frames[1])
-    imageA = imutils.resize(imageA, height=600)
-    imageB = imutils.resize(imageB, height=600)
-
-    stitcher = Stitcher()
-    (result, vis) = stitcher.stitch([imageA, imageB], showMatches=True)
-
-    for image in frames[2:]:
-        imageA = result
-        imageB = cv2.imread(image)
+        # load the two images and resize them to have a height of 600 pixels
+        # (for faster processing)
+        imageA = cv2.imread(args["first"])
+        imageB = cv2.imread(args["second"])
         imageA = imutils.resize(imageA, height=600)
         imageB = imutils.resize(imageB, height=600)
+
+        # stitch the images together to create a panorama
+        stitcher = Stitcher()
         (result, vis) = stitcher.stitch([imageA, imageB], showMatches=True)
 
-    cv2.imshow('Result', result)
-    cv2.waitKey(0)
-
-    cv2.destroyAllWindows()
+        # show the images
+        cv2.imshow("Image A", imageA)
+        cv2.imshow("Image B", imageB)
+        cv2.imshow("Keypoint Matches", vis)
+        cv2.imshow("Result", result)
+        cv2.waitKey(0)
